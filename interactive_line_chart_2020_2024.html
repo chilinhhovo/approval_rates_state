@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Approval Rates by Race and State - All US States (2020-2024)</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: white;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: left;
+            margin-bottom: 30px;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .chart-container {
+            background: white;
+            padding: 10px;
+        }
+        .chart-title {
+            font-size: 10px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .chart {
+            width: 100%;
+            height: 220px;
+        }
+        /* Force transparent hover background */
+        .plotly .hoverlabel {
+            background-color: white !important;
+            border: none !important;
+        }
+        .plotly .hoverlabel .bg {
+            background-color: white !important;
+        }
+        /* Additional aggressive overrides */
+        .plotly .hoverlabel,
+        .plotly .hoverlabel *,
+        .plotly .hoverlabel .bg,
+        .plotly .hoverlabel .bg * {
+            background-color: white !important;
+            background: white !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        /* Target any Plotly hover elements */
+        [class*="hoverlabel"],
+        [class*="hover"] {
+            background-color: white !important;
+            background: white !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Approval Rates by Race and State - All US States (2020-2024)</h1>
+        
+        <div id="chartGrid" class="chart-grid"></div>
+    </div>
+
+    <script>
+        // Color scheme matching the UC example
+        const colors = {
+            'Asian': '#1f77b4',      // Light blue
+            'White': '#2ca02c',       // Dark blue  
+            'Black': '#d62728',       // Red
+            'Hawaiian': '#9467bd',    // Purple
+            'Indigenous': '#8c564b'   // Brown
+        };
+
+        // Function to load CSV data
+        async function loadData() {
+            try {
+                const response = await fetch('race_approval_rates_by_state_year.csv');
+                const csvText = await response.text();
+                const lines = csvText.split('\n');
+                const data = [];
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].split(',');
+                    if (line.length >= 6) {
+                        const year = parseInt(line[0]);
+                        if (year >= 2020 && year <= 2024) {
+                            data.push({
+                                year: year,
+                                state: line[1],
+                                race: line[2],
+                                total: parseInt(line[3]),
+                                approved: parseInt(line[4]),
+                                approval_rate: parseFloat(line[5])
+                            });
+                        }
+                    }
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Error loading data:', error);
+                return [];
+            }
+        }
+
+        // State abbreviation mapping
+        const stateAbbreviations = {
+            'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'District of Columbia': 'DC', 'Florida': 'FL',
+            'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME',
+            'Maryland': 'MD', 'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH',
+            'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI',
+            'South Carolina': 'SC', 'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
+        };
+
+        // Function to create individual chart
+        function createStateChart(data, state, containerId) {
+            const stateAbbr = stateAbbreviations[state];
+            const stateData = data.filter(d => d.state === stateAbbr);
+            const races = ['Asian', 'White', 'Black', 'Hawaiian', 'Indigenous'];
+            const traces = [];
+            const annotations = [];
+
+            // Get all years for this state
+            const allYears = [...new Set(stateData.map(d => d.year))].sort();
+            
+            // Create hover data for all races at each year
+            const hoverData = {};
+            allYears.forEach(year => {
+                hoverData[year] = {};
+                races.forEach(race => {
+                    const yearRaceData = stateData.find(d => d.year === year && d.race === race);
+                    if (yearRaceData) {
+                        hoverData[year][race] = yearRaceData.approval_rate;
+                    }
+                });
+            });
+
+            races.forEach((race, index) => {
+                const raceData = stateData.filter(d => d.race === race).sort((a, b) => a.year - b.year);
+                if (raceData.length > 0) {
+                    const years = raceData.map(d => d.year);
+                    const rates = raceData.map(d => d.approval_rate);
+                    const lastYear = years[years.length - 1];
+                    const lastRate = rates[rates.length - 1];
+
+                    // Create custom hover text for each point
+                    const hoverTexts = years.map(year => {
+                        const allRacesData = hoverData[year];
+                        let text = '';
+                        
+                        races.forEach(r => {
+                            if (allRacesData && allRacesData[r] !== undefined) {
+                                const percentage = (allRacesData[r] * 100).toFixed(0);
+                                const color = colors[r] || '#666';
+                                text += `<span style="color: ${color}">${percentage}% ${r}</span><br>`;
+                            }
+                        });
+                        
+                        return text;
+                    });
+
+                    traces.push({
+                        x: years,
+                        y: rates,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: race,
+                        line: {
+                            width: 2,
+                            color: colors[race] || '#666'
+                        },
+                        marker: {
+                            size: 8,
+                            symbol: 'circle',
+                            color: colors[race] || '#666'
+                        },
+                        text: hoverTexts,
+                        hovertemplate: '%{text}<extra></extra>'
+                    });
+                }
+            });
+
+            const layout = {
+                title: {
+                    text: state,
+                    font: {size: 12, color: '#333'},
+                    x: 0.5
+                },
+                xaxis: {
+                    title: '',
+                    tickmode: 'linear',
+                    tick0: 2020,
+                    dtick: 1,
+                    range: [2019.5, 2024.5],
+                    showgrid: true,
+                    gridcolor: '#f0f0f0'
+                },
+                yaxis: {
+                    title: '',
+                    tickformat: '.0%',
+                    range: [0.5, 1.0],
+                    showgrid: true,
+                    gridcolor: '#f0f0f0'
+                },
+                hovermode: 'closest',
+                margin: {
+                    l: 30,
+                    r: 80,
+                    t: 30,
+                    b: 50
+                },
+                showlegend: false,
+                hoverlabel: {
+                    bgcolor: 'white',
+                    bordercolor: 'rgba(0,0,0,0)',
+                    font: {
+                        color: '#333',
+                        size: 12
+                    }
+                }
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: false
+            };
+
+            Plotly.newPlot(containerId, traces, layout, config);
+        }
+
+        // Function to create grid of charts
+        function createChartGrid(data) {
+            const gridContainer = document.getElementById('chartGrid');
+            gridContainer.innerHTML = '';
+            
+            // All US states and territories (sorted by population, largest first)
+            const allStates = [
+                'California', 'Texas', 'Florida', 'New York', 'Pennsylvania', 'Illinois', 'Ohio', 'Georgia', 'North Carolina', 'Michigan',
+                'New Jersey', 'Virginia', 'Washington', 'Arizona', 'Massachusetts', 'Tennessee', 'Indiana', 'Missouri', 'Maryland', 'Colorado',
+                'Wisconsin', 'Minnesota', 'South Carolina', 'Alabama', 'Louisiana', 'Kentucky', 'Oregon', 'Oklahoma', 'Connecticut', 'Utah',
+                'Nevada', 'Iowa', 'Arkansas', 'Mississippi', 'Kansas', 'West Virginia', 'Nebraska', 'Idaho', 'Hawaii', 'New Hampshire',
+                'Maine', 'Montana', 'Rhode Island', 'Delaware', 'South Dakota', 'North Dakota', 'Alaska', 'District of Columbia', 'Vermont', 'Wyoming'
+            ];
+            
+            allStates.forEach(state => {
+                const chartContainer = document.createElement('div');
+                chartContainer.className = 'chart-container';
+                
+                const chartTitle = document.createElement('div');
+                chartTitle.className = 'chart-title';
+                chartTitle.textContent = state;
+                
+                const chartDiv = document.createElement('div');
+                chartDiv.className = 'chart';
+                chartDiv.id = `chart-${state}`;
+                
+                chartContainer.appendChild(chartTitle);
+                chartContainer.appendChild(chartDiv);
+                gridContainer.appendChild(chartContainer);
+                
+                createStateChart(data, state, `chart-${state}`);
+            });
+        }
+
+        // Initialize the application
+        async function initChart() {
+            const data = await loadData();
+            
+            if (data.length === 0) {
+                document.getElementById('chartGrid').innerHTML = 'Error loading data. Please check the CSV file.';
+                return;
+            }
+
+            // Create charts
+            createChartGrid(data);
+        }
+
+        // Start the application
+        initChart();
+    </script>
+</body>
+</html> 
